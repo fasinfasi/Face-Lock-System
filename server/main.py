@@ -257,6 +257,22 @@ async def delete_file(username: str, folder_name: str, file_name: str):
 async def health_check():
     return {"status": "healthy"}
 
+@app.get("/check-db")
+async def check_database():
+    try:
+        # Get all users without face encodings
+        users = list(db.users.find({}, {"name": 1, "registration_date": 1, "_id": 0}))
+        return {
+            "success": True,
+            "user_count": len(users),
+            "users": users
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -79,13 +79,27 @@ def get_face_encoding(image):
 def find_existing_face(face_encoding):
     """Check if face already exists in database."""
     try:
+        # First, check if database is empty
+        user_count = users.count_documents({})
+        print(f"Total users in database: {user_count}")
+        
+        if user_count == 0:
+            print("Database is empty, no existing faces to compare")
+            return None
+
         all_users = list(users.find())
+        print(f"Found {len(all_users)} users to compare against")
+        
         for user in all_users:
-            for stored_encoding in user["face_encodings"]:
+            print(f"\nChecking against user: {user['name']}")
+            for idx, stored_encoding in enumerate(user["face_encodings"]):
                 stored_encoding = np.array(stored_encoding)
                 similarity = cosine_similarity([face_encoding], [stored_encoding])[0][0]
-                if similarity > 0.6:  # Threshold for face matching
+                print(f"Encoding {idx + 1} similarity: {similarity:.4f}")
+                if similarity > 0.7:  # Increased threshold for more accurate matching
+                    print(f"Match found with user {user['name']} (similarity: {similarity:.4f})")
                     return user["name"]
+        print("No matching faces found")
         return None
     except Exception as e:
         print(f"Error finding existing face: {str(e)}")
@@ -94,30 +108,51 @@ def find_existing_face(face_encoding):
 def register_user(name: str, image_data: str) -> dict:
     """Register a new user with multiple face encodings"""
     try:
+        print(f"\nStarting registration for user: {name}")
+        
         # Check if user already exists
-        if users.find_one({"name": name}):
+        existing_user = users.find_one({"name": name})
+        if existing_user:
+            print(f"User {name} already exists in database")
             return {"success": False, "message": "User already exists"}
 
         # Decode and process image
+        print("Decoding image data...")
         image = decode_base64_image(image_data)
         if image is None:
+            print("Failed to decode image")
             return {"success": False, "message": "Invalid image data"}
 
         # Get face encoding
+        print("Getting face encoding...")
         face_encoding = get_face_encoding(image)
         if face_encoding is None:
+            print("No face detected in image")
             return {"success": False, "message": "No face detected in the image"}
 
+        # Check if face already exists in database
+        print("Checking for existing face matches...")
+        existing_face = find_existing_face(face_encoding)
+        if existing_face:
+            print(f"Found existing face match: {existing_face}")
+            return {
+                "success": False,
+                "message": f"This face is already registered as '{existing_face}'. Please login instead."
+            }
+
         # Store user data with multiple encodings
+        print("Storing new user data...")
         user_data = {
             "name": name,
-            "face_encodings": [face_encoding.tolist()],  # Store as list for multiple encodings
+            "face_encodings": [face_encoding.tolist()],
             "registration_date": datetime.utcnow()
         }
         
-        users.insert_one(user_data)
+        result = users.insert_one(user_data)
+        print(f"Successfully registered user {name} with ID {result.inserted_id}")
         return {"success": True, "message": "User registered successfully"}
     except Exception as e:
+        print(f"Registration error: {str(e)}")
         return {"success": False, "message": str(e)}
 
 def verify_user(image_data: str) -> dict:
